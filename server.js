@@ -1,19 +1,23 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-const cheerio = require('cheerio'); // Added cheerio
+const cheerio = require('cheerio');
+const bodyParser = require('body-parser'); // Nodig voor POST requests
+const path = require('path'); // Importeer de 'path' module
 
 const app = express();
 const PORT = 3000;
 
-app.use(cors()); // Enable CORS for all routes
+app.use(cors()); // CORS inschakelen voor alle routes
+app.use(bodyParser.json()); // JSON body parser
+app.use(bodyParser.urlencoded({ extended: true })); // URL-encoded body parser
 
-// Serve static files from the current directory
-app.use(express.static(__dirname));
+// Statische bestanden serveren vanuit de 'public' map
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve index.html for the root path
+// index.html serveren voor de root-path vanuit de 'public' map
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/proxy', async (req, res) => {
@@ -28,11 +32,23 @@ app.get('/proxy', async (req, res) => {
             responseType: 'text', // Changed to text for HTML parsing
             headers: {
                 'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-                // Forward other relevant headers if needed, but be careful not to leak sensitive info
-            }
+                // WARNING: Forwarding 'Cookie' headers can have privacy implications as it sends the user's cookies to the target site.
+                'Cookie': req.headers.cookie || '',
+                // Stuur alleen de noodzakelijke headers door om lekken te voorkomen
+                'Accept': req.headers.accept || '*/*',
+                'Accept-Language': req.headers['accept-language'] || 'en-US,en;q=0.9',
+                // WARNING: Forwarding 'Referer' headers can have privacy implications as it reveals the previous page visited by the user.
+                'Referer': req.headers.referer || ''
+            },
         });
 
         const contentType = response.headers['content-type'];
+        
+        // Stuur de set-cookie header door
+        if (response.headers['set-cookie']) {
+            res.setHeader('set-cookie', response.headers['set-cookie']);
+        }
+
 
         if (contentType && contentType.includes('text/html')) {
             const $ = cheerio.load(response.data);
